@@ -1,5 +1,7 @@
 import sys
 import os
+from collections import defaultdict
+import time
 
 
 def read_csv(filepath):
@@ -35,22 +37,24 @@ def generate_frequent_itemset(transactions, minsup):
 		The meaning of the output is as follows: itemset {margarine}, {ready soups}, {citrus fruit, semi-finished bread}, {tropical fruit, yogurt, coffee}, {whole milk} are all frequent itemset
 
 	'''
-
-	frequent_items = generate_initial_frequent_items(transactions, minsup)
-	frequent_items_output = []
-	print (frequent_items)
+	minsup_count = minsup * len(transactions)
+	frequent_items_output, frequent_items = generate_initial_frequent_items(transactions, minsup_count)
+	size = 2
 
 	while len(frequent_items) > 0:
+		size = size + 1
+		# update result set
 		frequent_items_output.extend(frequent_items)
 		# candidate generation
-		candidates = candidate_generation(frequent_items)
+		candidates = candidate_generation(frequent_items, size)
 		# candidate pruning
 		pruned_candidates = candidate_prune(frequent_items, candidates)
 		# candidate elimination
-		frequent_items = candidate_elimination(transactions, pruned_candidates, minsup)
+		frequent_items = candidate_elimination(transactions, pruned_candidates, minsup_count)
 	return frequent_items_output
 
-def candidate_elimination(transactions, candidates, minsup):
+
+def candidate_elimination(transactions, candidates, minsup_count):
 	'''
 	eliminate all candidates whose support count is less than minsup
 	:param transactions: list of list
@@ -60,12 +64,13 @@ def candidate_elimination(transactions, candidates, minsup):
 	'''
 	result_candidates = []
 	for candidate in candidates:
-		support = get_support_for_candidate(transactions, candidate)
-		if support >= minsup:
+		support = get_support_count_for_candidate(transactions, candidate)
+		if support >= minsup_count:
 			result_candidates.append(candidate)
 	return result_candidates
 
-def get_support_for_candidate(transactions, candidate):
+
+def get_support_count_for_candidate(transactions, candidate):
 	'''
 	calculate support for the candidate
 	:param transactions: list of list
@@ -76,7 +81,7 @@ def get_support_for_candidate(transactions, candidate):
 	for transaction in transactions:
 		if is_contains_candidate(transaction, candidate):
 			support_count += 1
-	return support_count/len(transactions)
+	return support_count
 
 
 def is_contains_candidate(transaction, candidate):
@@ -99,14 +104,12 @@ def candidate_prune(frequent_items, candidates):
 	:param candidate:  Lk+1
 	:return: remove itemset from candidate whose has infrequent subset
 	'''
-	if (len(frequent_items[0]) == 1):
-		return candidates
-
 	pruned_candidates = []
 	for candidate in candidates:
 		if not is_prune_candidate(frequent_items, candidate):
 			pruned_candidates.append(candidate)
 	return pruned_candidates
+
 
 def is_prune_candidate(frequent_items, candidate):
 	'''
@@ -115,54 +118,42 @@ def is_prune_candidate(frequent_items, candidate):
 	:param candidate: list
 	:return:
 	'''
-	subsets = []
-	for i in reversed(range(len(candidate))):
-		candidate_copy = candidate[:]
-		candidate_copy.pop(i)
-		subsets.append(candidate_copy)
-	for subset in subsets:
+	for item in candidate:
+		subset = candidate - frozenset([item])
 		if subset not in frequent_items:
 			return True
 	return False
 
 
-def candidate_generation(frequent_items):
+def candidate_generation(frequent_items, size):
 	'''
 	generate k+1 itemsets from k frequent itemsets
 	:param frequent_items:
 	:return:
 	'''
-	next_frequent_items = []
-	length = len(frequent_items)
-	for i in range(length-1):
-		for j in range(i+1, length):
-			next_item_set = merge(frequent_items[i], frequent_items[j])
-			if next_item_set is not None:
-				next_frequent_items.append(next_item_set)
+	next_frequent_items = set()
+	for a in frequent_items:
+		for b in frequent_items:
+			c = a | b
+			if a != b and len(c) == size:
+				next_frequent_items.add(c)
 	return next_frequent_items
 
 
-def merge(itemset1, itemset2):
+def generate_two_itemset(transaction):
 	'''
-	merge two itemsets when they have same items in len 1~k-1
-	:param itemset1: list
-	:param itemset2: list
-	:return: list or None
+
+	:param transaction:
+	:return: 2 itemsets in transaction
 	'''
-	length = len(itemset1)
-	if length == 1:
-		merged_set = itemset1[:]
-		merged_set.append(itemset2[0])
-		return merged_set
-	for i in range(length):
-		if i < length-1 and itemset1[i] != itemset2[i]:
-			return None
-		elif i == length-1:
-			merged_set = itemset1[:]
-			merged_set.append(itemset2[i])
-			return merged_set
-		else:
-			continue
+	two_itemset = []
+	i = 1
+	for a in transaction:
+		for b in transaction[i:]:
+			two_itemset.append(frozenset([a, b]))
+		i += 1
+	return two_itemset
+
 
 def generate_initial_frequent_items(transactions, minsup):
 	'''
@@ -171,16 +162,16 @@ def generate_initial_frequent_items(transactions, minsup):
 	:param minsup:
 	:return: list of list(length 1)
 	'''
-	items = {}
+	single_items = defaultdict(int)
+	two_items = defaultdict(int)
 	for transaction in transactions:
+		for itemset in generate_two_itemset(transaction):
+			two_items[itemset] += 1
 		for item in transaction:
-			if items.get(item) is None:
-				items[item] = 1
-			else:
-				items[item] += 1
-	num_trans = len(transactions)
-	frequent_items = {k: v / num_trans for k, v in items.items() if v / num_trans >= minsup }
-	return [[x] for x in frequent_items.keys()]
+			single_items[item] += 1
+	frequent_one_items = {k: v for k, v in single_items.items() if v >= minsup }
+	frequent_two_items = {k: v for k, v in two_items.items() if v >= minsup}
+	return [[x] for x in frequent_one_items.keys()], frequent_two_items.keys()
 
 
 # To be implemented
@@ -206,11 +197,11 @@ def generate_association_rules(transactions, minsup, minconf):
 		itemset_size = len(frequent_itemset)
 		if itemset_size >= 2:
 			h_size = 1
-			H = [[x] for x in frequent_itemset]
+			H = set(frequent_itemset)
 			H, output_rules = rule_prune(transactions, frequent_itemset, H, minconf)
 			rules.extend(output_rules)
 			while itemset_size > h_size + 1:
-				H = candidate_generation(H)
+				H = candidate_generation(H, h_size + 1)
 				H, output_rules = rule_prune(transactions, frequent_itemset, H, minconf)
 				rules.extend(output_rules)
 				h_size += 1
@@ -228,31 +219,19 @@ def rule_prune(transactions, frequent_itemset, H, minconf):
 	:return:
 	'''
 	output_rules = []
-	delete_itemsets = []
+	delete_itemsets = set()
 	for h in H:
-		itemset_x = minus_subset(frequent_itemset, h)
-		conf = calculate_conf(transactions, itemset_x, h)
+		set_h = set([h])
+		itemset_x = frequent_itemset - set_h
+		conf = calculate_conf(transactions, itemset_x, set_h)
 		if conf >= minconf:
-			rule = itemset_x[:]
+			rule = [x for x in itemset_x]
 			rule.append('=>')
-			rule.extend(h)
+			rule.extend([h])
 			output_rules.append(rule)
 		else:
-			delete_itemsets.append(h)
-	return minus_subset(H, delete_itemsets), output_rules
-
-
-def minus_subset(itemset1, itemset2):
-	'''
-	:param itemset1:
-	:param itemset2:
-	:return: itemset1 - itemset2
-	'''
-	result_set = []
-	for item in itemset1:
-		if item not in itemset2:
-			result_set.append(item)
-	return result_set
+			delete_itemsets.add(h)
+	return H - delete_itemsets, output_rules
 
 
 def calculate_conf(transactions, itemset_x, itemset_y):
@@ -263,10 +242,10 @@ def calculate_conf(transactions, itemset_x, itemset_y):
 	:param itemset_y:
 	:return: confidence
 	'''
-	itemset_all = itemset_x[:]
-	itemset_all.extend(itemset_y)
-	support_all = get_support_for_candidate(transactions, itemset_all)
-	support_x = get_support_for_candidate(transactions, itemset_x)
+	length = len(transactions)
+	itemset_all = itemset_x | itemset_y
+	support_all = get_support_count_for_candidate(transactions, itemset_all)/length
+	support_x = get_support_count_for_candidate(transactions, itemset_x)/length
 	return support_all/support_x
 
 
@@ -317,5 +296,6 @@ def main():
 				output_str += '}\n'
 				f.write(output_str)
 
-
+starttime = time.time()
 main()
+print('time taken = {0}'.format(time.time() - starttime))
