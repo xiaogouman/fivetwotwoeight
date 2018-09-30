@@ -108,7 +108,8 @@ def isCorePoint(x, X, eps, minpts):
 	border_points = np.argwhere(distances <= eps)
 	if border_points.shape[0] >= minpts:
 		return True
-
+	else:
+		return False
 
 def main():
 	

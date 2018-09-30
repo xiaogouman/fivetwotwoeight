@@ -10,7 +10,7 @@ def read_csv(filepath):
 		filepath (str): the path to the file to be read
 
 	Returns:
-		list: a list of lists, where each component list is a list of string representing a transaction
+		list: a list of frozensets, where each component frozenset is a list of string representing a transaction
 
 	'''
 
@@ -18,7 +18,7 @@ def read_csv(filepath):
 	with open(filepath, 'r') as f:
 		lines = f.readlines()
 		for line in lines:
-			transactions.append(line.strip().split(',')[:-1])
+			transactions.append(frozenset(line.strip().split(',')[:-1]))
 	return transactions
 
 
@@ -42,6 +42,7 @@ def generate_frequent_itemset(transactions, minsup):
 	size = 2
 
 	while len(frequent_items) > 0:
+		# update size
 		size = size + 1
 		# update result set
 		frequent_items_output.extend(frequent_items)
@@ -57,52 +58,36 @@ def generate_frequent_itemset(transactions, minsup):
 def candidate_elimination(transactions, candidates, minsup_count):
 	'''
 	eliminate all candidates whose support count is less than minsup
-	:param transactions: list of list
-	:param candidates: list of list
-	:param minsup: float
-	:return: candidates that support > minsup
+	:param transactions(list of frozenset)
+	:param candidates(list of frozenset)
+	:param minsup(float)
+	:return: list of frozenset
 	'''
-	result_candidates = []
-	for candidate in candidates:
-		support = get_support_count_for_candidate(transactions, candidate)
-		if support >= minsup_count:
-			result_candidates.append(candidate)
-	return result_candidates
+	candidate_counts = get_support_count_for_candidate(transactions, candidates)
+	return [k for k, v in candidate_counts.items() if v >= minsup_count]
 
 
-def get_support_count_for_candidate(transactions, candidate):
+def get_support_count_for_candidate(transactions, candidates):
 	'''
 	calculate support for the candidate
-	:param transactions: list of list
-	:param candidate: list
-	:return: support of the candidate
+	:param transactions(list of frozenset)
+	:param candidate(list of frozenset)
+	:return: candidate_counts(dict(frozenset, int))
 	'''
-	support_count = 0
+	candidate_counts = defaultdict(int)
 	for transaction in transactions:
-		if is_contains_candidate(transaction, candidate):
-			support_count += 1
-	return support_count
-
-
-def is_contains_candidate(transaction, candidate):
-	'''
-	return true if candidate is in the trasactions
-	:param transaction: list of list
-	:param candidate: list
-	:return:
-	'''
-	for item in candidate:
-		if item not in transaction:
-			return False
-	return True
+		buckets = [candidate for candidate in candidates if candidate <= transaction]
+		for bucket in buckets:
+			candidate_counts[bucket] += 1
+	return candidate_counts
 
 
 def candidate_prune(frequent_items, candidates):
 	'''
-
-	:param frequent_items: Fk frequent items
-	:param candidate:  Lk+1
-	:return: remove itemset from candidate whose has infrequent subset
+	remove itemset from candidate whose has infrequent subset
+	:param frequent_items(list of frozenset)
+	:param candidate(frozenset)
+	:return: pruned_candidates(list of frozenset)
 	'''
 	pruned_candidates = []
 	for candidate in candidates:
@@ -113,10 +98,9 @@ def candidate_prune(frequent_items, candidates):
 
 def is_prune_candidate(frequent_items, candidate):
 	'''
-	return true if any subset of candidate is not among frequent items
-	:param frequent_items: list of list
-	:param candidate: list
-	:return:
+	:param frequent_items(list of frozenset)
+	:param candidate(frozenset)
+	:return: true if any subset of candidate is not among frequent items
 	'''
 	for item in candidate:
 		subset = candidate - frozenset([item])
@@ -128,8 +112,8 @@ def is_prune_candidate(frequent_items, candidate):
 def candidate_generation(frequent_items, size):
 	'''
 	generate k+1 itemsets from k frequent itemsets
-	:param frequent_items:
-	:return:
+	:param frequent_items(list of frozenset)
+	:return: next_frequent_items(set)
 	'''
 	next_frequent_items = set()
 	for a in frequent_items:
@@ -142,14 +126,14 @@ def candidate_generation(frequent_items, size):
 
 def generate_two_itemset(transaction):
 	'''
-
-	:param transaction:
-	:return: 2 itemsets in transaction
+	:param transaction(frozenset)
+	:return: two_itemset(list of frozenset)
 	'''
 	two_itemset = []
 	i = 1
-	for a in transaction:
-		for b in transaction[i:]:
+	tran = list(transaction)
+	for a in tran:
+		for b in tran[i:]:
 			two_itemset.append(frozenset([a, b]))
 		i += 1
 	return two_itemset
@@ -157,10 +141,11 @@ def generate_two_itemset(transaction):
 
 def generate_initial_frequent_items(transactions, minsup):
 	'''
-	generate frequent itemsets of length 1
 	:param transactions: list of list
 	:param minsup:
-	:return: list of list(length 1)
+	:return: frequent_one_items(list of list),
+			frequent_two_items(list of list),
+			transaction_sets(list of frozenset)
 	'''
 	single_items = defaultdict(int)
 	two_items = defaultdict(int)
@@ -169,9 +154,9 @@ def generate_initial_frequent_items(transactions, minsup):
 			two_items[itemset] += 1
 		for item in transaction:
 			single_items[item] += 1
-	frequent_one_items = {k: v for k, v in single_items.items() if v >= minsup }
-	frequent_two_items = {k: v for k, v in two_items.items() if v >= minsup}
-	return [[x] for x in frequent_one_items.keys()], frequent_two_items.keys()
+	frequent_one_items = [[k] for k, v in single_items.items() if v >= minsup]
+	frequent_two_items = [k for k, v in two_items.items() if v >= minsup]
+	return frequent_one_items, frequent_two_items
 
 
 # To be implemented
@@ -242,11 +227,9 @@ def calculate_conf(transactions, itemset_x, itemset_y):
 	:param itemset_y:
 	:return: confidence
 	'''
-	length = len(transactions)
 	itemset_all = itemset_x | itemset_y
-	support_all = get_support_count_for_candidate(transactions, itemset_all)/length
-	support_x = get_support_count_for_candidate(transactions, itemset_x)/length
-	return support_all/support_x
+	support_counts = get_support_count_for_candidate(transactions, [itemset_all, itemset_x])
+	return support_counts.get(itemset_all)/support_counts.get(itemset_x)
 
 
 def main():
