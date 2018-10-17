@@ -21,34 +21,42 @@ class MyDecisionTreeRegressor():
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
         self.root = None
-
+        
+    def get_groups(self, j, s, data):
+        left_data = []
+        right_data = []
+        for each_data in data:
+            if each_data[j] <= s:
+                left_data.append(each_data)
+            else:
+                right_data.append(each_data)
+        return np.array(left_data), np.array(right_data)    
+    
     def split_data(self, data):
         min_error = np.finfo(float).max
         split_variable = 0
         split_threshold = 0
-        split_index = 0
         left_mean = 0
         right_mean = 0
+        my_left_data = []
+        my_right_data = []
         for j in range(data.shape[1]-1):
-            sorted_data = data[data[:, j].argsort()]
-            x_j = sorted_data[:, j]
-            y = sorted_data[:, -1]
-            for i in range(len(x_j)-1):
+            x_j = data[:,j]
+            for i in range(len(x_j)):
                 # threshold
                 s = x_j[i]
-                left_y, right_y = y[:i+1], y[i+1:]
-                c1, c2 = np.mean(left_y), np.mean(right_y)
-                error = sum((left_y - c1)*(left_y - c1)) + sum((right_y - c2)*(right_y - c2))
-                if error < min_error:
-                    min_error, split_variable, split_threshold, split_index, left_mean, right_mean = \
-                        error, j, s, i, c1, c2
-
-        sorted_data = data[data[:, split_variable].argsort()]
-        left_data = sorted_data[:split_index+1]
-        right_data = sorted_data[split_index+1:]
+                left_data, right_data = self.get_groups(j, s, data)
+                if len(left_data) > 0 and len(right_data) > 0:
+                    left_y, right_y = left_data[:,-1], right_data[:,-1]
+                    
+                    c1, c2 = np.mean(left_y), np.mean(right_y)
+                    error = sum((left_y - c1)*(left_y - c1)) + sum((right_y - c2)*(right_y - c2))
+                    if error < min_error:
+                        min_error, split_variable, split_threshold, left_mean, right_mean, my_left_data, my_right_data = \
+                            error, j, s, c1, c2, left_data, right_data
 
         return {'splitting_variable': split_variable, 'splitting_threshold': split_threshold,
-                'left': left_mean, 'right': right_mean, 'groups': [left_data, right_data]}
+                'left': left_mean, 'right': right_mean, 'groups': [my_left_data, my_right_data]}
 
     def split(self, node, depth):
         groups = node['groups']
@@ -121,8 +129,6 @@ if __name__=='__main__':
                 test_model_string = json.load(fp)
 
             print(operator.eq(model_string, test_model_string))
-            print (model_string)
-            print(test_model_string)
 
             y_pred = tree.predict(x_train)
 

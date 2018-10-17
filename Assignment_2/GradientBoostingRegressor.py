@@ -88,8 +88,8 @@ if __name__=='__main__':
                 test_model_string = json.load(fp)
 
             print(operator.eq(model_string, test_model_string))
-            print (model_string)
-            print (test_model_string)
+            #print (model_string)
+            #print (test_model_string)
             '''
             y_pred = gbr.predict(x_train)
 
