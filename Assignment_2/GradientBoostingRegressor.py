@@ -32,6 +32,7 @@ class MyGradientBoostingRegressor():
         self.estimators = np.empty((self.n_estimators,), dtype=np.object)
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
+        self.f0 = 0
 
     def fit(self, X, y):
         '''
@@ -42,20 +43,25 @@ class MyGradientBoostingRegressor():
         You should update the self.estimators in this function
         '''
         f = np.mean(y)
+        self.f0 = f
         for i in range(self.n_estimators):
             residual = y - f
             estimator = MyDecisionTreeRegressor(max_depth=self.max_depth, min_samples_split=self.min_samples_split)
             estimator.fit(X, residual)
-            f = f - self.learning_rate * np.array(estimator.predict(X))
+            f = f + self.learning_rate * np.array(estimator.predict(X))
             self.estimators[i] = estimator
-        print (self.estimators)
 
     def predict(self, X):
         '''
         :param X: Feature data, type: numpy array, shape: (N, num_feature)
         :return: y_pred: Predicted label, type: numpy array, shape: (N,)
         '''
-        pass
+        y_pred = self.f0
+        for estimator in self.estimators:
+            y_pred += self.learning_rate * np.array(estimator.predict(X))
+        return y_pred
+    	
+        
 
     def get_model_string(self):
         model_dict = dict()
@@ -88,11 +94,9 @@ if __name__=='__main__':
                 test_model_string = json.load(fp)
 
             print(operator.eq(model_string, test_model_string))
-            #print (model_string)
-            #print (test_model_string)
-            '''
+       
             y_pred = gbr.predict(x_train)
 
             y_test_pred = np.genfromtxt("Test_data" + os.sep + "y_pred_gradient_boosting_"  + str(i) + "_" + str(j) + ".csv", delimiter=",")
             print(np.square(y_pred - y_test_pred).mean() <= 10**-10)
-            '''
+       
